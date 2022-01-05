@@ -276,13 +276,15 @@ function App() {
   const [isTasksError, setIsTasksError] = useState(false);
 
   const [tasks, setTasks] = useState([]);
-  const [edit, setEdit] = useState({ id: null, status: false });
+  const [edit, setEdit] = useState({ id: null, status: false, message: "" });
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [isDeleteError, setIsDeleteError] = useState(false);
   const [isDeleteClicked, setIsDeleteClicked] = useState(null);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
   const [isSaveError, setIsSaveError] = useState(false);
   const [isSaveClicked, setIsSaveClicked] = useState(null);
+  const valueRef = useRef("");
+  const inputRef = useRef();
 
   const fetchTasks = useCallback(() => {
     const fetchData = async () => {
@@ -306,6 +308,12 @@ function App() {
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.value = edit.message;
+    }
+  }, [edit.status]);
 
   function onDragEnd(result) {
     const { source, destination } = result;
@@ -341,14 +349,11 @@ function App() {
   }
 
   const handleMessageEdit = (e) => {
-    console.log(e.target.value);
-    // messageRef.current = e.target.value;
-    // console.log("messageRef.current", messageRef.current);
+    valueRef.current = e.target.value;
   };
 
-  const handleMessageUpdate = (e, item) => {
-    setEdit({ id: null, status: false });
-    console.log(e.target.value);
+  const handleMessageSave = (e, item) => {
+    console.log(valueRef.current.value);
     const fetchData = async () => {
       setIsSaveError(false);
       setIsSaveLoading(item.id);
@@ -357,17 +362,18 @@ function App() {
           ...endpoints.updateTask,
           data: new URLSearchParams({
             taskid: item.id,
-            message: e.target.value,
+            message: inputRef.current.value,
           }),
         });
 
         await fetchTasks();
+        setIsSaveLoading(false);
+        setEdit({ id: null, status: false, message: "" });
         console.log("update response", result.data);
       } catch (err) {
         console.log("update error", err);
         setIsSaveError(true);
       }
-      setIsSaveLoading(false);
     };
     fetchData();
   };
@@ -567,24 +573,27 @@ function App() {
                   </Box>
                 </Typography>
                 <Typography variant="h6">
-                  <input
-                    id={item.id}
-                    value={item.message}
-                    onChange={handleMessageEdit}
-                  />
+                  <input id={item.id} ref={inputRef} />
                 </Typography>
                 <Box sx={{ display: "flex" }}>
                   <IconButton
                     disabled={edit.status}
-                    onClick={() => {
-                      setEdit({ id: item.id, status: true });
+                    onClick={(e) => {
+                      if (inputRef.current) {
+                        inputRef.current.value = item.message;
+                      }
+                      setEdit({
+                        id: item.id,
+                        status: true,
+                        message: item.message,
+                      });
                     }}
                   >
                     <EditIcon />
                   </IconButton>
                   <IconButton
                     disabled={!edit.status && edit.id === item.id}
-                    onClick={(e) => handleMessageUpdate(e, item)}
+                    onClick={(e) => handleMessageSave(e, item)}
                   >
                     {isSaveLoading && item.id === isSaveLoading ? (
                       <CircularProgress />
@@ -640,13 +649,22 @@ function App() {
                 <Box sx={{ display: "flex" }}>
                   <IconButton
                     disabled={edit.status}
-                    onClick={() => setEdit({ id: item.id, status: true })}
+                    onClick={(e) => {
+                      if (inputRef.current) {
+                        inputRef.current.value = item.message;
+                      }
+                      setEdit({
+                        id: item.id,
+                        status: true,
+                        message: item.message,
+                      });
+                    }}
                   >
                     <EditIcon />
                   </IconButton>
                   <IconButton
                     disabled={edit.status || edit.id !== item.id}
-                    onClick={(e) => handleMessageUpdate(e, item)}
+                    onClick={(e) => handleMessageSave(e, item)}
                   >
                     {isSaveLoading && item.id === isSaveLoading ? (
                       <CircularProgress />
