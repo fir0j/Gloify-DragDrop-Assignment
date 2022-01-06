@@ -34,6 +34,12 @@ import axios from "axios";
 import DualListDragDrop from "./DragDrop";
 import CircularProgress from "@mui/material/CircularProgress";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import Radio from "@mui/material/Radio";
+import RadioGroup from "@mui/material/RadioGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import debounce from "@mui/utils/debounce";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 function appBarLabel(label) {
   return (
@@ -246,7 +252,7 @@ const endpoints = {
   },
   createTask: {
     method: "POST",
-    url: "https://devza.com/tests/tasks/update",
+    url: "https://devza.com/tests/tasks/create",
     headers: {
       AuthToken: "UrM4YHgb1FcqEf1tuKwmAMMX5MxFZ12a",
     },
@@ -267,6 +273,13 @@ const endpoints = {
   },
 };
 
+function formateDateAndTime(date) {
+  let isodate = date.toISOString().substring(0, 10);
+  let localTime = date.toLocaleTimeString().substring(0, 8);
+  let dateAndTime = `${isodate} ${localTime}`;
+  return dateAndTime;
+}
+
 function App() {
   const [{ users, isUsersLoading, isUsersError }, reFetchUsers] = useUsersApi(
     endpoints.listUsers
@@ -285,6 +298,12 @@ function App() {
   const [isSaveClicked, setIsSaveClicked] = useState(null);
   const valueRef = useRef("");
   const inputRef = useRef();
+  const messageRef = useRef("");
+  const [startDate, setStartDate] = useState(new Date());
+  const [radioValue, setRadioValue] = useState("1");
+  const [userId, setUserId] = useState(null);
+  const [isSumbitLoading, setIsSubmitLoading] = useState(false);
+  const [isSumbitError, setIsSubmitError] = useState(false);
 
   const fetchTasks = useCallback(() => {
     const fetchData = async () => {
@@ -309,6 +328,7 @@ function App() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // assigning actual value to the Dom after re-render
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.value = edit.message;
@@ -348,10 +368,6 @@ function App() {
     }
   }
 
-  const handleMessageEdit = (e) => {
-    valueRef.current = e.target.value;
-  };
-
   const handleMessageSave = (e, item) => {
     console.log(valueRef.current.value);
     const fetchData = async () => {
@@ -378,6 +394,34 @@ function App() {
     fetchData();
   };
 
+  const handleAssignTask = (e, id) => {
+    const fetchData = async () => {
+      setIsSubmitError(false);
+      setIsSubmitLoading(id);
+      try {
+        const result = await axios({
+          ...endpoints.createTask,
+          data: new URLSearchParams({
+            taskid: id,
+            message: messageRef.current,
+            due_date: formateDateAndTime(startDate),
+            priority: radioValue,
+            assigned_to: userId,
+          }),
+        });
+
+        await fetchTasks();
+        setIsSubmitLoading(false);
+        setUserId(null);
+        console.log("create response", result.data);
+      } catch (err) {
+        setIsSubmitError(err);
+        console.log("create error", err);
+      }
+    };
+    fetchData();
+  };
+
   const handleDelete = (e, item) => {
     const fetchData = async () => {
       setIsDeleteError(false);
@@ -398,6 +442,45 @@ function App() {
     };
     fetchData();
   };
+  const taskform = (
+    <Box component="form" sx={{ ml: 2 }}>
+      <div>
+        <Typography variant="body1">Message</Typography>
+        <input
+          required
+          type="text"
+          name="message"
+          onChange={(e) => {
+            messageRef.current = e.target.value;
+          }}
+        />
+      </div>
+      <div>
+        <Typography variant="body1">Due date</Typography>
+        <DatePicker
+          required
+          selected={startDate}
+          onChange={(date) => setStartDate(date)}
+        />
+      </div>
+      <div>
+        <Typography variant="body1" component="label" sx={{ mr: 1 }}>
+          Priority
+        </Typography>
+        <RadioGroup
+          row
+          aria-label="gender"
+          name="controlled-radio-buttons-group"
+          value={radioValue}
+          onChange={(e) => setRadioValue(e.target.value)}
+        >
+          <FormControlLabel value="1" control={<Radio />} label="High" />
+          <FormControlLabel value="2" control={<Radio />} label="Medium" />
+          <FormControlLabel value="3" control={<Radio />} label="Low" />
+        </RadioGroup>
+      </div>
+    </Box>
+  );
 
   const usersList = (
     <List
@@ -417,21 +500,54 @@ function App() {
                 key={item.id}
               >
                 <ListItem
-                  // onMouseOver={() => console.log(item)}
                   secondaryAction={
-                    <AddCircleOutlinedIcon sx={{ color: "green" }} />
+                    userId === item.id ? (
+                      <ListItemButton
+                        sx={{
+                          border: "1px solid green",
+                        }}
+                        onClick={(e) => handleAssignTask(e, item.id)}
+                      >
+                        <Typography
+                          variant="body1"
+                          sx={{
+                            color: "green",
+                            display: "flex",
+                            alignContent: "center",
+                          }}
+                        >
+                          {isSumbitLoading && userId === item.id ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            "Submit task"
+                          )}
+                        </Typography>
+                      </ListItemButton>
+                    ) : (
+                      <ListItemButton
+                        sx={{ border: "1px solid green" }}
+                        onClick={(e) => {
+                          console.log("userid", item.id);
+                          setUserId(item.id);
+                        }}
+                      >
+                        <Typography variant="body1" sx={{ color: "green" }}>
+                          Assign task
+                        </Typography>
+                        <AddCircleOutlinedIcon sx={{ color: "green", ml: 1 }} />
+                      </ListItemButton>
+                    )
                   }
                 >
-                  <ListItemButton>
-                    <ListItemAvatar>
-                      <Avatar
-                        alt={`Avatar n°${item.id}`}
-                        // src={`/static/images/avatar/${value + 1}.jpg`}
-                      />
-                    </ListItemAvatar>
-                    <ListItemText id={labelId} primary={item.name} />
-                  </ListItemButton>
+                  <ListItemAvatar>
+                    <Avatar
+                      alt={`Avatar n°${item.id}`}
+                      // src={`/static/images/avatar/${value + 1}.jpg`}
+                    />
+                  </ListItemAvatar>
+                  <ListItemText id={labelId} primary={item.name} />
                 </ListItem>
+                {userId === item.id ? taskform : null}
                 <Divider />
               </Paper>
             );
@@ -596,7 +712,7 @@ function App() {
                     onClick={(e) => handleMessageSave(e, item)}
                   >
                     {isSaveLoading && item.id === isSaveLoading ? (
-                      <CircularProgress />
+                      <CircularProgress size={20} />
                     ) : (
                       <SaveIcon />
                     )}
@@ -608,7 +724,7 @@ function App() {
                     }}
                   >
                     {isDeleteLoading && item.id === isDeleteClicked ? (
-                      <CircularProgress />
+                      <CircularProgress size={20} />
                     ) : (
                       <DeleteIcon />
                     )}
@@ -667,7 +783,7 @@ function App() {
                     onClick={(e) => handleMessageSave(e, item)}
                   >
                     {isSaveLoading && item.id === isSaveLoading ? (
-                      <CircularProgress />
+                      <CircularProgress size={20} />
                     ) : (
                       <SaveIcon />
                     )}
@@ -679,7 +795,7 @@ function App() {
                     }}
                   >
                     {isDeleteLoading && item.id === isDeleteClicked ? (
-                      <CircularProgress />
+                      <CircularProgress size={20} />
                     ) : (
                       <DeleteIcon />
                     )}
