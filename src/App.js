@@ -365,10 +365,9 @@ function App() {
         await fetchTasks();
         setIsSaveLoading(false);
         setEdit({ id: null, status: false, message: "" });
-        console.log("update response", result.data);
       } catch (err) {
         console.log("update error", err);
-        setIsSaveError(true);
+        setIsSaveError(err);
       }
     };
     fetchData();
