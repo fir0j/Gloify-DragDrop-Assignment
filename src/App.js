@@ -113,7 +113,6 @@ const useListsApi = (options, initialData = []) => {
       setIsLoading(true);
       try {
         const result = await axios(url);
-        console.log("length is", result.data.tasks.length);
         const prioritizedTasks = getTasksByPriority(result.data.tasks);
         setLists(prioritizedTasks);
       } catch (error) {
@@ -127,64 +126,6 @@ const useListsApi = (options, initialData = []) => {
 };
 
 const getTasksByPriority = (taskList) => {
-  // let tasks = [
-  //   {
-  //     id: "400",
-  //     message: "firoj1",
-  //     assingned_to: "1",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "1",
-  //   },
-  //   {
-  //     id: "401",
-  //     message: "task2",
-  //     assingned_to: "2",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "1",
-  //   },
-  //   {
-  //     id: "403",
-  //     message: "task3",
-  //     assingned_to: "1",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "3",
-  //   },
-  //   {
-  //     id: "404",
-  //     message: "task4",
-  //     assingned_to: "1",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "2",
-  //   },
-  //   {
-  //     id: "405",
-  //     message: "task5",
-  //     assingned_to: "2",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "2",
-  //   },
-  //   {
-  //     id: "406",
-  //     message: "task6",
-  //     assingned_to: "3",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "3",
-  //   },
-  //   {
-  //     id: "407",
-  //     message: "task7",
-  //     assingned_to: "4",
-  //     assignned_name: "Arpit",
-  //     due_date: "2020-09-18 12:12:12",
-  //     priority: "3",
-  //   },
-  // ];
   if (taskList === null || taskList === undefined) return [];
   let High = taskList.filter((item) => Number(item.priority) === 1);
   let Medium = taskList.filter((item) => Number(item.priority) === 2);
@@ -280,15 +221,23 @@ function formateDateAndTime(date) {
   return dateAndTime;
 }
 
+function filterTaskByUser(id, tasks) {
+  console.log("id is", id, "tasks is", tasks);
+  if (!tasks && !tasks.length) return [];
+  const result = tasks.filter(
+    (item) => (item) => item.map((el) => el.id === id)
+  );
+}
+
 function App() {
   const [{ users, isUsersLoading, isUsersError }, reFetchUsers] = useUsersApi(
     endpoints.listUsers
   );
 
+  const [tasks, setTasks] = useState([]);
   const [isTasksLoading, setIsTasksLoading] = useState(false);
   const [isTasksError, setIsTasksError] = useState(false);
 
-  const [tasks, setTasks] = useState([]);
   const [edit, setEdit] = useState({ id: null, status: false, message: "" });
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [isDeleteError, setIsDeleteError] = useState(false);
@@ -304,6 +253,8 @@ function App() {
   const [userId, setUserId] = useState(null);
   const [isSumbitLoading, setIsSubmitLoading] = useState(false);
   const [isSumbitError, setIsSubmitError] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userTask, setUserTask] = useState([]);
 
   const fetchTasks = useCallback(() => {
     const fetchData = async () => {
@@ -311,7 +262,6 @@ function App() {
       setIsTasksLoading(true);
       try {
         const result = await axios(endpoints.listTasks);
-        console.log("length is", result.data.tasks.length);
         const prioritizedTasks = getTasksByPriority(result.data.tasks);
         setTasks(prioritizedTasks);
       } catch (err) {
@@ -328,6 +278,13 @@ function App() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // setting default selected user
+  useEffect(() => {
+    if (users && users.length) {
+      setSelectedUser(users[0]);
+    }
+  }, [users.length]);
+
   // assigning actual value to the Dom after re-render
   useEffect(() => {
     if (inputRef.current) {
@@ -335,7 +292,7 @@ function App() {
     }
   }, [edit.status]);
 
-  function onDragEnd(result) {
+  async function onDragEnd(result) {
     const { source, destination } = result;
 
     // dropped outside the list
@@ -363,8 +320,28 @@ function App() {
       newState[sInd] = result[sInd];
       newState[dInd] = result[dInd];
       setTasks(newState);
-      // filtering out empty array if exists.
-      // setTasks(newState.filter((group) => group.length));
+
+      // making the same changes in database as well.
+      const sIndex = Number(source.droppableId);
+      let targetItem = tasks[sIndex][source.index];
+      const targetedPriority = `${Number(destination.droppableId) + 1}`;
+      targetItem.priority = targetedPriority;
+      console.log("new priority", targetItem);
+      // for moving item, just change the priority and update it.
+      try {
+        const result = await axios({
+          ...endpoints.updateTask,
+          data: new URLSearchParams({
+            taskid: targetItem.id,
+            priority: targetedPriority,
+          }),
+        });
+
+        console.log("move response", result.data);
+      } catch (err) {
+        console.log("move error", err);
+        await fetchTasks();
+      }
     }
   }
 
@@ -394,15 +371,15 @@ function App() {
     fetchData();
   };
 
-  const handleAssignTask = (e, id) => {
+  const handleAssignTask = (e, item) => {
     const fetchData = async () => {
       setIsSubmitError(false);
-      setIsSubmitLoading(id);
+      setIsSubmitLoading(item.id);
       try {
         const result = await axios({
           ...endpoints.createTask,
           data: new URLSearchParams({
-            taskid: id,
+            taskid: item.id,
             message: messageRef.current,
             due_date: formateDateAndTime(startDate),
             priority: radioValue,
@@ -442,6 +419,14 @@ function App() {
     };
     fetchData();
   };
+
+  function getUserId() {
+    if (selectedUser && selectedUser.id) {
+      return selectedUser.id;
+    }
+    return "1";
+  }
+
   const taskform = (
     <Box component="form" sx={{ ml: 2 }}>
       <div>
@@ -482,6 +467,8 @@ function App() {
     </Box>
   );
 
+  console.log(selectedUser);
+
   const usersList = (
     <List
       dense
@@ -500,18 +487,30 @@ function App() {
                 key={item.id}
               >
                 <ListItem
+                  sx={{
+                    bgcolor: item.id === getUserId() ? "primary.dark" : "",
+                    color: item.id === getUserId() ? "common.white" : "",
+                  }}
                   secondaryAction={
                     userId === item.id ? (
                       <ListItemButton
                         sx={{
-                          border: "1px solid green",
+                          border: "1px solid",
+                          borderColor:
+                            item.id === getUserId() ? "common.white" : "green",
                         }}
-                        onClick={(e) => handleAssignTask(e, item.id)}
+                        onClick={(e) => {
+                          setSelectedUser(item);
+                          handleAssignTask(e, item);
+                        }}
                       >
                         <Typography
                           variant="body1"
                           sx={{
-                            color: "green",
+                            color:
+                              item.id === getUserId()
+                                ? "common.white"
+                                : "green",
                             display: "flex",
                             alignContent: "center",
                           }}
@@ -525,27 +524,56 @@ function App() {
                       </ListItemButton>
                     ) : (
                       <ListItemButton
-                        sx={{ border: "1px solid green" }}
+                        sx={{
+                          border: "1px solid",
+                          borderColor:
+                            item.id === getUserId() ? "common.white" : "green",
+                        }}
                         onClick={(e) => {
                           console.log("userid", item.id);
+                          setSelectedUser(item);
                           setUserId(item.id);
                         }}
                       >
-                        <Typography variant="body1" sx={{ color: "green" }}>
+                        <Typography
+                          variant="body1"
+                          sx={{
+                            color:
+                              item.id === getUserId()
+                                ? "common.white"
+                                : "green",
+                          }}
+                        >
                           Assign task
                         </Typography>
-                        <AddCircleOutlinedIcon sx={{ color: "green", ml: 1 }} />
+                        <AddCircleOutlinedIcon
+                          sx={{
+                            color:
+                              item.id === getUserId()
+                                ? "common.white"
+                                : "green",
+                            ml: 1,
+                          }}
+                        />
                       </ListItemButton>
                     )
                   }
                 >
-                  <ListItemAvatar>
-                    <Avatar
-                      alt={`Avatar n°${item.id}`}
-                      // src={`/static/images/avatar/${value + 1}.jpg`}
-                    />
-                  </ListItemAvatar>
-                  <ListItemText id={labelId} primary={item.name} />
+                  <ListItemButton
+                    onClick={() => {
+                      setSelectedUser(item);
+                      setUserId(null);
+                    }}
+                  >
+                    <ListItemAvatar>
+                      <Avatar
+                        alt={`Avatar n°${item.id}`}
+                        src=""
+                        // src={`/static/images/avatar/${value + 1}.jpg`}
+                      />
+                    </ListItemAvatar>
+                    <ListItemText id={labelId} primary={item.name} />
+                  </ListItemButton>
                 </ListItem>
                 {userId === item.id ? taskform : null}
                 <Divider />
