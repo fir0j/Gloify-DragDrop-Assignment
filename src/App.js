@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import AppBar from "@mui/material/AppBar";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
@@ -11,9 +17,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import AssignmentIcon from "@mui/icons-material/Assessment";
 import AddCircleOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-// import logo from "./logo.svg";
 import "./App.css";
-import { styled } from "@mui/material/styles";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
 import Grid from "@mui/material/Grid";
@@ -28,18 +32,16 @@ import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import ListItemAvatar from "@mui/material/ListItemAvatar";
-import Checkbox from "@mui/material/Checkbox";
 import Avatar from "@mui/material/Avatar";
 import axios from "axios";
-import DualListDragDrop from "./DragDrop";
 import CircularProgress from "@mui/material/CircularProgress";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import Radio from "@mui/material/Radio";
 import RadioGroup from "@mui/material/RadioGroup";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import debounce from "@mui/utils/debounce";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import Alert from "@mui/material/Alert";
 
 function appBarLabel(label) {
   return (
@@ -221,20 +223,13 @@ function formateDateAndTime(date) {
   return dateAndTime;
 }
 
-function filterTaskByUser(id, tasks) {
-  console.log("id is", id, "tasks is", tasks);
-  if (!tasks && !tasks.length) return [];
-  const result = tasks.filter(
-    (item) => (item) => item.map((el) => el.id === id)
-  );
-}
-
 function App() {
   const [{ users, isUsersLoading, isUsersError }, reFetchUsers] = useUsersApi(
     endpoints.listUsers
   );
 
   const [tasks, setTasks] = useState([]);
+  const tasksClone = useRef([]);
   const [isTasksLoading, setIsTasksLoading] = useState(false);
   const [isTasksError, setIsTasksError] = useState(false);
 
@@ -244,8 +239,6 @@ function App() {
   const [isDeleteClicked, setIsDeleteClicked] = useState(null);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
   const [isSaveError, setIsSaveError] = useState(false);
-  const [isSaveClicked, setIsSaveClicked] = useState(null);
-  const valueRef = useRef("");
   const inputRef = useRef();
   const messageRef = useRef("");
   const [startDate, setStartDate] = useState(new Date());
@@ -253,8 +246,7 @@ function App() {
   const [userId, setUserId] = useState(null);
   const [isSumbitLoading, setIsSubmitLoading] = useState(false);
   const [isSumbitError, setIsSubmitError] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [userTask, setUserTask] = useState([]);
+  const [selectedUser, setSelectedUser] = useState({ id: "1", name: "Aprit" });
 
   const fetchTasks = useCallback(() => {
     const fetchData = async () => {
@@ -263,6 +255,7 @@ function App() {
       try {
         const result = await axios(endpoints.listTasks);
         const prioritizedTasks = getTasksByPriority(result.data.tasks);
+        tasksClone.current = result.data.tasks;
         setTasks(prioritizedTasks);
       } catch (err) {
         console.log("list users error", err);
@@ -291,6 +284,18 @@ function App() {
       inputRef.current.value = edit.message;
     }
   }, [edit.status]);
+
+  // or fetch tasks on each user change
+  useEffect(() => {
+    if (selectedUser.id === "0") return;
+    const userTasks = tasksClone.current.filter(
+      (item) => item.assigned_to === selectedUser.id
+    );
+    const prioritizedTasks = getTasksByPriority(userTasks);
+    setTasks(prioritizedTasks);
+
+    // console.log("prioritizedTasks", prioritizedTasks);
+  }, [selectedUser.id, tasksClone.current.length]);
 
   async function onDragEnd(result) {
     const { source, destination } = result;
@@ -326,7 +331,6 @@ function App() {
       let targetItem = tasks[sIndex][source.index];
       const targetedPriority = `${Number(destination.droppableId) + 1}`;
       targetItem.priority = targetedPriority;
-      console.log("new priority", targetItem);
       // for moving item, just change the priority and update it.
       try {
         const result = await axios({
@@ -346,7 +350,6 @@ function App() {
   }
 
   const handleMessageSave = (e, item) => {
-    console.log(valueRef.current.value);
     const fetchData = async () => {
       setIsSaveError(false);
       setIsSaveLoading(item.id);
@@ -427,6 +430,117 @@ function App() {
     return "1";
   }
 
+  const autocompleteSearch = useMemo(
+    () => (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          borderRadius: "4px",
+        }}
+      >
+        <Autocomplete
+          fullWidth
+          freeSolo
+          id="autocomplete search"
+          // value={selectedUser}
+          onChange={(e, newSelectedValue) => {
+            if (newSelectedValue) {
+              setSelectedUser(newSelectedValue);
+            }
+          }}
+          onInputChange={(e) => {
+            if (e === null || e.target.value === "") {
+              return "";
+            }
+          }}
+          // onKeyDown={handleEnterClick}
+
+          sx={{
+            height: ["35px", "35px", "35px"],
+            "& input": {
+              fontSize: "1.25rem",
+              px: "1ch",
+              bgcolor: "common.white",
+              width: "100%",
+              border: "none",
+              borderTopLeftRadius: "4px",
+              borderBottomLeftRadius: "4px",
+              height: ["35px", "35px", "35px"],
+              mb: 1,
+              "&:focus": {
+                outline: "none",
+              },
+            },
+          }}
+          renderInput={(params) => (
+            <div ref={params.InputProps.ref}>
+              <input type="search" {...params.inputProps} />
+              {isUsersError && (
+                <Box
+                  sx={{
+                    textJustify: "center",
+                    color: "error.main",
+                    position: "relative",
+                    zIndex: 1,
+                  }}
+                >
+                  <strong>
+                    {isUsersError.message === "Network Error"
+                      ? "No Internet !"
+                      : isUsersError.message}
+                  </strong>
+                </Box>
+              )}
+            </div>
+          )}
+          options={users}
+          getOptionLabel={(option) => option.name}
+          // filterOptions={(x) => x}
+          renderOption={(props, option, { inputValue }) => {
+            const matches = match(option.name, inputValue);
+            const parts = parse(option.name, matches);
+            return (
+              <li {...props}>
+                <div>
+                  {parts.map((part, index) => (
+                    <span
+                      key={index}
+                      style={{
+                        fontWeight: part.highlight ? 700 : 400,
+                      }}
+                    >
+                      {part.text}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            );
+          }}
+        />
+        <IconButton
+          aria-label="search"
+          sx={{
+            bgcolor: "primary.main",
+            width: ["46px", "46px", "54px"],
+            height: ["35px", "35px", "35px"],
+            maxHeight: "100%",
+            minHeight: "0%",
+            borderRadius: 0,
+            borderTopRightRadius: (theme) => theme.shape.borderRadius,
+            borderBottomRightRadius: (theme) => theme.shape.borderRadius,
+            ":hover": {
+              bgcolor: (theme) => theme.palette.secondary.main,
+            },
+          }}
+        >
+          <SearchIcon sx={{ fontSize: "1.5em", color: "common.black" }} />
+        </IconButton>
+      </Box>
+    ),
+    [users.length, isUsersLoading, isUsersError]
+  );
+
   const taskform = (
     <Box component="form" sx={{ ml: 2 }}>
       <div>
@@ -466,8 +580,6 @@ function App() {
       </div>
     </Box>
   );
-
-  console.log(selectedUser);
 
   const usersList = (
     <List
@@ -612,7 +724,7 @@ function App() {
             borderColor: "primary.main",
           }}
         >
-          {/* {autocompleteSearch} */}
+          {autocompleteSearch}
         </Typography>
       </Grid>
       <Grid item xs={8}>
@@ -867,6 +979,22 @@ function App() {
         </AppBar>
         {appHeader}
 
+        {isUsersError ? (
+          <Alert severity="error">{isUsersError.message}</Alert>
+        ) : null}
+        {isTasksError ? (
+          <Alert severity="error">{isTasksError.message}</Alert>
+        ) : null}
+        {isSaveError ? (
+          <Alert severity="error">{isSaveError.message}</Alert>
+        ) : null}
+        {isSumbitError ? (
+          <Alert severity="error">{isSumbitError.message}</Alert>
+        ) : null}
+        {isDeleteError ? (
+          <Alert severity="error">{isDeleteError.message}</Alert>
+        ) : null}
+        {isTasksLoading ? <LinearProgress /> : null}
         <Grid container>
           <Grid item xs={4} sx={{ bgcolor: "primary.main" }}>
             {usersList}
